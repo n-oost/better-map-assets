@@ -26,6 +26,14 @@ The builder deliberately does not publish absolute local paths or raw keys. Sour
 
 Commit the pack/metadata first. Then create the channel with the resulting full commit SHA and metadata fields, and commit it separately. Never rewrite an existing pack. Verify the remote archive bytes against the published SHA-256 before considering publication successful.
 
+With `gh` authenticated, verify the actual remote pack and every inventory entry:
+
+```text
+python tools/verify_remote.py n-oost/better-map-assets
+```
+
+This helper reads the channel through authenticated `gh` and retrieves the commit-pinned binary through a fresh Git clone. It is not runtime plugin code or a substitute for the final anonymous public-endpoint test.
+
 ## Current limitations
 
 The input is the existing local tile collection, not a fresh complete game-cache render. Its surface generation manifest reports 426 regions whose objects failed to decrypt. Additional map IDs can include separately generated or downloaded imagery; their exact provenance needs review. A full archive means all indexed snapshot files, not verified completeness of the game's map.
