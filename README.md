@@ -1,47 +1,37 @@
-# Better Map assets
+# Better Map Assets
 
-Private development snapshot for Better Map's automatic full-map download architecture.
-
-This repository is separate from the plugin code. It contains complete imagery packs and a channel document; it does not contain player data, credentials, raw game caches, or XTEA keys. The plugin's installed-pack loader uses this channel when downloads are enabled. Anonymous production access still requires a public endpoint.
+Asset repository and distribution channel for the [Better Map](https://github.com/n-oost/runelite-plugin-better-map-2) RuneLite plugin. Hosts immutable map tile packs and channel manifests used by the plugin's automatic map downloader.
 
 ## Layout
 
-- `packs/<sha256>.zip`: immutable complete imagery pack.
-- `metadata/<sha256>.json`: size, source limitations, and publication information.
-- `channels/tiles-v1.json`: compatibility channel referencing a commit-pinned pack.
-- `tools/build_pack.py`: deterministic ZIP builder and verifier, using Python's standard library.
+- `packs/<sha256>.zip` — Complete tile imagery pack containing `inventory.json`, `tiles/index.txt`, and PNG tiles.
+- `metadata/<sha256>.json` — Pack metadata, tile counts, and build details.
+- `channels/tiles-v1.json` — Channel manifest pointing to the active commit-pinned pack.
+- `tools/` — Build and verification scripts for tile packing, ZIP creation, and integrity checks.
 
-The ZIP contains `inventory.json`, `tiles/index.txt`, and PNG tiles. The inventory records every payload file's exact size/hash and coverage. The outer archive hash protects the inventory. Pack identity does not depend on repository owner or name.
+## Building a pack
 
-## Generate a snapshot
+1. **Pack tiles**:
+   ```bash
+   java tools/TilePacker.java <tile-source-dir> <packed-output-dir> 2
+   ```
 
-First run the plugin project's existing `TilePacker.java` with an explicit temporary output directory and maximum zoom 2. Never direct this publication operation at plugin resources.
+2. **Build and hash the ZIP archive**:
+   ```bash
+   python tools/build_pack.py <packed-output-dir> --source-manifest <tile-source-dir>/manifest.json --plugin <plugin-root> --version <version>
+   ```
 
-```text
-java <plugin>/tools/src/main/java/com/bettermap/tiles/TilePacker.java <local-tile-root> <packed-output> 2
-python tools/build_pack.py <packed-output> --source-manifest <local-tile-root>/manifest.json --plugin <plugin-root> --version <snapshot-version>
-```
+3. **Publish**:
+   - Commit the generated `packs/<sha256>.zip` and `metadata/<sha256>.json`.
+   - Update `channels/tiles-v1.json` with the new commit SHA and metadata.
+   - Commit the channel update.
 
-The builder deliberately does not publish absolute local paths or raw keys. Source files remain untouched. Its metadata records bundled-data hashes to identify the companion dataset snapshot, not to certify compatibility automatically.
+4. **Verify remote integrity**:
+   ```bash
+   python tools/verify_remote.py n-oost/better-map-assets
+   ```
 
-Commit the pack/metadata first. Then create the channel with the resulting full commit SHA and metadata fields, and commit it separately. Never rewrite an existing pack. Verify the remote archive bytes against the published SHA-256 before considering publication successful.
+## Notes
 
-With `gh` authenticated, verify the actual remote pack and every inventory entry:
-
-```text
-python tools/verify_remote.py n-oost/better-map-assets
-```
-
-This helper reads the channel through authenticated `gh` and retrieves the commit-pinned binary through a fresh Git clone. It is not runtime plugin code or a substitute for the final anonymous public-endpoint test.
-
-## Current limitations
-
-The input is the existing local tile collection, not a fresh complete game-cache render. The generation manifest's `regionsFailedToDecrypt: 426` is a mislabeled count of empty object lists. The 2026-09-27 audit decoded all 426 successfully, with no missing keys or decode errors in the available cache. See [the investigation](INVESTIGATION.md). Additional map IDs correspond to separate Wiki dungeon maps; exact file provenance still needs review. A full archive means all indexed snapshot files, not verified completeness of the game's map.
-
-This repository is private by user request. Authenticated developer downloads can validate transfer/integrity, but normal Plugin Hub installations cannot fetch private assets anonymously. Do not embed GitHub tokens in the plugin. Production requires a public asset endpoint plus the Hub installation warning.
-
-Before public release, verify provenance/licensing, coverage, companion-data compatibility, and clean-cache rendering. See `ASSET-NOTICES.md`.
-
-## Repository migration
-
-The plugin-code repository can move independently. Its eventual downloader should hold owner/repository/channel configuration in one place. If this asset repository moves, publish the same pack bytes at the new location and update the plugin endpoint plus channel commit reference. Content hashes allow installed packs to be reused; channel ETags must remain scoped to their URL.
+- **Integrity**: Packs are content-addressed by SHA-256 and protected by per-file inventory hashes. Existing packs are immutable; updates publish a new archive hash.
+- **Licensing & provenance**: Underlying game assets belong to Jagex. See [`ASSET-NOTICES.md`](ASSET-NOTICES.md) for provenance and attribution notes.
