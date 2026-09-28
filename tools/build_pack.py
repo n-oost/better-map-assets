@@ -29,18 +29,30 @@ def main():
     parser.add_argument("--source-manifest", required=True, type=Path)
     parser.add_argument("--plugin", required=True, type=Path)
     parser.add_argument("--version", required=True)
+    parser.add_argument("--extra-packed", type=Path, help="Additional packed map-0 tiles, e.g. native zoom 3")
+    parser.add_argument("--output", type=Path, help="Destination asset repository")
     args = parser.parse_args()
-    root = Path(__file__).resolve().parents[1]
-    paths = args.packed.joinpath("index.txt").read_text(encoding="utf-8").splitlines()
+    tools_root = Path(__file__).resolve().parent
+    root = args.output or tools_root.parent
+    inputs = {}
+    for folder in (args.packed, args.extra_packed):
+        if folder is None:
+            continue
+        for path in sorted(folder.joinpath("0").rglob("*.png")):
+            relative = path.relative_to(folder).as_posix()
+            if relative in inputs:
+                raise ValueError("Duplicate tile: " + relative)
+            inputs[relative] = path
+    paths = sorted(inputs)
     if not paths or len(paths) != len(set(paths)) or len(paths) > 49998:
         raise ValueError("Empty, duplicate, or oversized tile index")
     paths = sorted(paths)
     inventory = {"schemaVersion": 1, "compatibilityId": "better-map-tiles-v1", "coverage": {}, "files": {}}
     for relative in paths:
-        match = re.fullmatch(r"(\d+)/(-?[0-3])/([0-3])_(\d+)_(\d+)\.png", relative)
-        if not match or int(match[2]) > 2:
+        match = re.fullmatch(r"(0)/(-[1-3]|[0-3])/([0-3])_(\d{1,5})_(\d{1,5})\.png", relative)
+        if not match:
             raise ValueError("Unsupported tile path: " + relative)
-        data = args.packed.joinpath(relative).read_bytes()
+        data = inputs[relative].read_bytes()
         if len(data) > 1048576 or data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR" or struct.unpack(">II", data[16:24]) != (256, 256):
             raise ValueError("Invalid PNG signature/dimensions/size: " + relative)
         name = "tiles/" + relative
@@ -60,7 +72,7 @@ def main():
         write_entry(archive, "inventory.json", manifest)
         write_entry(archive, "tiles/index.txt", index)
         for relative in paths:
-            write_entry(archive, "tiles/" + relative, args.packed.joinpath(relative).read_bytes())
+            write_entry(archive, "tiles/" + relative, inputs[relative].read_bytes())
     if temporary.stat().st_size > 128 * 1048576:
         raise ValueError("Archive exceeds transfer limit")
     with zipfile.ZipFile(temporary) as archive:
@@ -79,7 +91,7 @@ def main():
         raise FileExistsError("Pack already exists; original preserved: " + target.name)
     temporary.rename(target)
     source = json.loads(args.source_manifest.read_text(encoding="utf-8"))
-    allowed = ("timestamp", "regionsRendered", "regionsWithDecryptedObjects", "regionsFailedToDecrypt", "totalTilesWritten")
+    allowed = ("timestamp", "regionsRendered", "regionsWithDecryptedObjects")
     baseline = {}
     resources = args.plugin / "src/main/resources/com/bettermap"
     for category in ("data", "dungeons", "poi"):
@@ -93,9 +105,11 @@ def main():
                  "fileCount": len(inventory["files"]) + 1},
         "tileCount": len(paths), "mapIds": sorted({int(path.split('/')[0]) for path in paths}),
         "sourceSummary": {key: source[key] for key in allowed if key in source},
-        "provenanceStatus": "Existing mixed local tile collection; additional map provenance and coverage require review",
+        "provenanceStatus": "Map 0 only: cache-rendered imagery; zoom 3 rendered natively at 8 pixels per game tile",
         "companionBundledDataSha256": baseline,
-        "packerSourceSha256": digest((args.plugin / "tools/src/main/java/com/bettermap/tiles/TilePacker.java").read_bytes())
+        "packerSourceSha256": digest(tools_root.joinpath("TilePacker.java").read_bytes()),
+        "rendererSourceSha256": digest(tools_root.joinpath("renderer/net/runelite/cache/HighDetailMapImageDumper.java").read_bytes()),
+        "zoomLevels": sorted({int(path.split('/')[1]) for path in paths})
     }
     destination = root / "metadata" / (pack_hash + ".json")
     destination.parent.mkdir(exist_ok=True)

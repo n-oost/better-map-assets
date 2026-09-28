@@ -2,7 +2,7 @@
 
 Private development snapshot for Better Map's automatic full-map download architecture.
 
-This repository is separate from the plugin code. It contains complete imagery packs and a channel document; it does not contain player data, credentials, raw game caches, or XTEA keys. The plugin does not download these assets yet.
+This repository is separate from the plugin code. It contains complete imagery packs and a channel document; it does not contain player data, credentials, raw game caches, or XTEA keys. The plugin's installed-pack loader uses this channel when downloads are enabled. Anonymous production access still requires a public endpoint.
 
 ## Layout
 
@@ -36,7 +36,7 @@ This helper reads the channel through authenticated `gh` and retrieves the commi
 
 ## Current limitations
 
-The input is the existing local tile collection, not a fresh complete game-cache render. Its surface generation manifest reports 426 regions whose objects failed to decrypt. Additional map IDs can include separately generated or downloaded imagery; their exact provenance needs review. A full archive means all indexed snapshot files, not verified completeness of the game's map.
+The input is the existing local tile collection, not a fresh complete game-cache render. The generation manifest's `regionsFailedToDecrypt: 426` is a mislabeled count of empty object lists. The 2026-09-27 audit decoded all 426 successfully, with no missing keys or decode errors in the available cache. See [the investigation](INVESTIGATION.md). Additional map IDs correspond to separate Wiki dungeon maps; exact file provenance still needs review. A full archive means all indexed snapshot files, not verified completeness of the game's map.
 
 This repository is private by user request. Authenticated developer downloads can validate transfer/integrity, but normal Plugin Hub installations cannot fetch private assets anonymously. Do not embed GitHub tokens in the plugin. Production requires a public asset endpoint plus the Hub installation warning.
 
